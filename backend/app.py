@@ -13,9 +13,9 @@ from dotenv import load_dotenv
 
 from modules.ai_client import AIClient
 from modules.store.vector_store import VectorStore
-from modules.rag import RAG
 from modules.assistant import Agent
 from modules.tools import get_all_tools
+from modules.prompt import create_chat_prompt
 
 if sys.stdout.encoding != 'utf-8':
     import codecs
@@ -35,19 +35,18 @@ CORS(app)
 
 assistant_instance = None
 vector_store_instance = None
-rag_instance = None
 sessions = {}
 
 
 def init_system():
     """初始化系统组件"""
-    global assistant_instance, vector_store_instance, rag_instance
+    global assistant_instance, vector_store_instance
 
     print("=" * 50)
     print("智能客服系统启动中... (LangChain 版本)")
     print("=" * 50)
 
-    print("\n[1/4] 初始化 AI 客户端...")
+    print("\n[1/3] 初始化 AI 客户端...")
     try:
         ai_client = AIClient(config_path="config.json")
         print("AI 客户端初始化完成")
@@ -55,7 +54,7 @@ def init_system():
         print("AI 客户端初始化失败: {}".format(e))
         raise
 
-    print("\n[2/4] 初始化知识库...")
+    print("\n[2/3] 初始化知识库...")
     try:
         vector_store_instance = VectorStore(ai_client=ai_client)
         kb_data = vector_store_instance.init_knowledge_base()
@@ -65,23 +64,13 @@ def init_system():
             print("知识库初始化完成")
     except Exception as e:
         print("知识库初始化警告: {}".format(e))
-        kb_data = None
 
-    print("\n[3/4] 初始化 RAG 检索器...")
-    try:
-        rag_instance = RAG(kb_data)
-        print("RAG 检索器初始化完成")
-    except Exception as e:
-        print("RAG 初始化警告: {}".format(e))
-        rag_instance = RAG(kb_data)
-
-    print("\n[4/4] 初始化 AI 助手...")
+    print("\n[3/3] 初始化 AI 助手...")
     try:
         tools = get_all_tools()
 
         assistant_instance = Agent(options={
-            "prompt": "你是一个专业的智能客服助手。",
-            "ragModule": rag_instance,
+            "prompt": create_chat_prompt(),
             "vectorStore": vector_store_instance,
             "tools": tools,
             "aiClient": ai_client

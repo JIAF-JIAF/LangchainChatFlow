@@ -3,7 +3,6 @@ LangChain LLM 模块
 封装 LangChain 的 ChatOpenAI 客户端
 """
 
-import os
 import json
 from typing import Optional, Any, Dict
 from langchain_openai import ChatOpenAI
@@ -33,14 +32,12 @@ class LLMClient:
         base_url: Optional[str] = None,
         model: str = "deepseek-v4-pro",
         config_path: Optional[str] = None,
-        temperature: float = 0.7,
-        streaming: bool = False
+        temperature: float = 0.7
     ):
         self.api_key = api_key
         self.base_url = base_url
         self.model = model
         self.temperature = temperature
-        self.streaming = streaming
         self.config_path = config_path
         self._client: Optional[ChatOpenAI] = None
         self._embedding_client: Optional[LangChainEmbeddings] = None
@@ -73,8 +70,7 @@ class LLMClient:
             model=self.model,
             api_key=self.api_key,
             base_url=self.base_url,
-            temperature=self.temperature,
-            streaming=self.streaming
+            temperature=self.temperature
         )
         print(f"LangChain LLM 客户端初始化成功 (model={self.model})")
 
@@ -91,7 +87,7 @@ class LLMClient:
         return self._embedding_client
 
     def create_embedding(self, text: str) -> list[float]:
-        """创建文本嵌入（保持原有接口）"""
+        """创建文本嵌入"""
         try:
             client = OpenAI(api_key=self.api_key, base_url=self.base_url)
             response = client.embeddings.create(
@@ -102,10 +98,6 @@ class LLMClient:
         except Exception as e:
             print(f"生成嵌入失败: {e}")
             return []
-
-    def get_client(self) -> ChatOpenAI:
-        """获取 ChatOpenAI 客户端（兼容原有接口）"""
-        return self._client
 
 
 class AIClient(LLMClient):

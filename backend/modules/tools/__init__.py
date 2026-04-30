@@ -12,21 +12,9 @@ def get_all_tools():
     """获取所有工具列表"""
     return [get_weather, get_weather_forecast, submit_form]
 
-
-def get_tool_by_name(name: str):
-    """根据名称获取工具"""
-    tools_map = {
-        "get_weather": get_weather,
-        "get_weather_forecast": get_weather_forecast,
-        "submit_form": submit_form,
-    }
-    return tools_map.get(name)
-
-
 __all__ = [
     'get_weather',
     'get_weather_forecast',
     'submit_form',
     'get_all_tools',
-    'get_tool_by_name',
 ]

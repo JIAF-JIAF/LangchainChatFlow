@@ -1,44 +1,18 @@
 """
 LangChain Agent 模块
-结合 LLM + Tools + Memory 的 Agent 实现
+结合 LLM + Tools 的 Agent 实现
 """
 
 from typing import Optional, Dict, Any, List
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain_core.prompts.chat import MessagesPlaceholder
+from langchain_core.runnables.history import RunnableWithMessageHistory
 
 from .ai_client import LLMClient
 from .tools import get_all_tools
 from .store.vector_store import VectorStore
-
-
-CUSTOMER_SERVICE_PROMPT = """你是一个专业的智能客服助手。
-
-## 你的职责:
-1. 热情友好地回答客户问题
-2. 提供准确的产品和服务信息
-3. 收集客户信息并记录咨询内容
-4. 根据客户需求提供合适的解决方案
-
-## 可用工具:
-- get_weather: 查询城市天气
-- get_weather_forecast: 查询天气预报
-- submit_form: 提交客户咨询表单
-
-## 工作流程:
-1. 首先了解客户的具体需求和问题
-2. 如果需要查询天气，使用天气工具
-3. 如果需要收集客户信息，使用表单提交工具
-4. 根据客户需求提供合适的解决方案
-
-## 注意事项:
-- 保持专业、友好的语气
-- 不要编造不实信息
-- 遇到无法回答的问题,引导客户留下联系方式,安排专人跟进
-- 收集客户信息时要礼貌说明用途"""
+from .prompt import CUSTOMER_SERVICE_PROMPT_TEMPLATE, create_chat_prompt
 
 
 class Agent:
@@ -54,87 +28,63 @@ class Agent:
 
         self.llm_client = options.get('aiClient')
         self.vector_store = options.get('vectorStore')
-        self.rag_module = options.get('ragModule')
-        self.prompt_template = options.get('prompt')
-        self.memory = options.get('memory')
         self._tools = options.get('tools', [])
-
-        self.system_prompt = CUSTOMER_SERVICE_PROMPT
-        if self.prompt_template:
-            if isinstance(self.prompt_template, dict):
-                self.system_prompt = self.prompt_template.get("content", CUSTOMER_SERVICE_PROMPT)
-            else:
-                self.system_prompt = str(self.prompt_template)
+        self.prompt = options.get('prompt')
 
         self.verbose = True
-        self._chat_history: Dict[str, List] = {}
+        self._chat_history_store: Dict[str, InMemoryChatMessageHistory] = {}
 
         if not self._tools:
             self._tools = get_all_tools()
 
-        self._build_agent()
+        self._build_rag_chain()
 
-    def _build_agent(self):
-        """构建 Agent"""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", self.system_prompt),
-            MessagesPlaceholder(variable_name="chat_history", optional=True),
-            ("human", "{input}"),
-        ])
+    def _get_chat_history(self, session_id: str) -> InMemoryChatMessageHistory:
+        """获取或创建会话历史（供 RunnableWithMessageHistory 使用）"""
+        if session_id not in self._chat_history_store:
+            self._chat_history_store[session_id] = InMemoryChatMessageHistory()
+        return self._chat_history_store[session_id]
 
-        self._chain = prompt | self.llm_client.chat | StrOutputParser()
-        print(f"Agent 构建成功，共 {len(self._tools)} 个工具")
+    def _build_rag_chain(self):
+        """构建 RAG Chain（纯 LCEL 方式）"""
+        try:
+            retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
+            self._rag_chain = (
+                {
+                    "input": lambda x: x["input"],
+                    "context": retriever | (lambda docs: "\n\n".join([d.page_content for d in docs]))
+                }
+                | self.prompt
+                | self.llm_client.chat
+            )
+            print("RAG Chain 构建成功，检索 top3 相关块")
+        except Exception as e:
+            print(f"警告：RAG 初始化失败 ({e})，使用纯对话模式")
+            self._rag_chain = (
+                {
+                    "input": lambda x: x["input"],
+                    "context": lambda x: "（当前无知识库数据）"
+                }
+                | self.prompt
+                | self.llm_client.chat
+            )
 
-    def set_rag_module(self, ragModule, vectorStore=None):
-        """设置 RAG 模块"""
-        self.rag_module = ragModule
-        self.vector_store = vectorStore
-
-    def set_tools(self, tools):
-        """设置工具"""
-        self._tools = tools
-
-    def enhance_query(self, user_message):
-        """使用 RAG 增强查询"""
-        if self.rag_module and self.vector_store:
-            try:
-                return self.rag_module.enhance_query(
-                    user_message,
-                    self.vector_store.create_embeddings,
-                    top_k=3
-                )
-            except Exception as e:
-                print("RAG 检索失败: {}".format(e))
-                return user_message
-        return user_message
-
-    def get_session(self, session_id):
-        """获取会话"""
-        return self._chat_history.get(session_id)
-
-    def create_session(self, session_id, system_content=""):
-        """创建会话"""
-        self._chat_history[session_id] = []
-        return self._chat_history[session_id]
+        self._rag_chain = RunnableWithMessageHistory(
+            self._rag_chain,
+            self._get_chat_history,
+            input_messages_key="input",
+            history_messages_key="chat_history"
+        )
 
     def invoke(self, input: str, session_id: str = "default") -> Dict[str, Any]:
-        """执行 Agent"""
-        chat_history = self.get_session(session_id)
-        if chat_history is None:
-            chat_history = self.create_session(session_id)
-
-        result = self._chain.invoke({
-            "input": input,
-            "chat_history": chat_history
-        })
-
-        if session_id not in self._chat_history:
-            self._chat_history[session_id] = []
-        self._chat_history[session_id].append(HumanMessage(content=input))
-        self._chat_history[session_id].append(AIMessage(content=result))
+        """执行 Agent（RAG 模式）"""
+        result = self._rag_chain.invoke(
+            {"input": input},
+            config={"configurable": {"session_id": session_id}}
+        )
 
         return {
-            "answer": result,
+            "answer": result.content if hasattr(result, 'content') else str(result),
             "intermediate_steps": [],
             "tool_messages": []
         }
@@ -147,28 +97,9 @@ class Agent:
             "tool_calls": []
         }
 
-    def submit_tool_result(self, session_id, tool_call_id, tool_result):
-        """提交工具结果"""
-        return self.chat(session_id, f"工具 {tool_call_id} 返回: {tool_result}")["content"]
-
     def process_message(self, session_id, user_message):
         """处理完整对话流程"""
         return self.chat(session_id, user_message)
 
-    def add_message(self, session_id, message):
-        """添加消息到历史"""
-        if session_id not in self._chat_history:
-            self._chat_history[session_id] = []
-        self._chat_history[session_id].append(message)
 
-    def prune_session_history(self, session_id, max_messages=50):
-        """修剪会话历史"""
-        if session_id in self._chat_history:
-            history = self._chat_history[session_id]
-            system_msgs = [m for m in history if isinstance(m, SystemMessage)]
-            other_msgs = [m for m in history if not isinstance(m, SystemMessage)]
-            if len(system_msgs) + len(other_msgs) > max_messages:
-                self._chat_history[session_id] = system_msgs + other_msgs[-(max_messages - len(system_msgs)):]
-
-
-__all__ = ['Agent', 'CUSTOMER_SERVICE_PROMPT']
+__all__ = ['Agent']
