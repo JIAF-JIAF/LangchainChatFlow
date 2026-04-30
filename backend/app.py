@@ -15,7 +15,6 @@ from modules.ai_client import AIClient
 from modules.store.vector_store import VectorStore
 from modules.rag import RAG
 from modules.assistant import Agent
-from modules.context.memory import Memory
 from modules.tools import get_all_tools
 
 if sys.stdout.encoding != 'utf-8':
@@ -78,7 +77,6 @@ def init_system():
 
     print("\n[4/4] 初始化 AI 助手...")
     try:
-        memory_instance = Memory()
         tools = get_all_tools()
 
         assistant_instance = Agent(options={
@@ -86,8 +84,7 @@ def init_system():
             "ragModule": rag_instance,
             "vectorStore": vector_store_instance,
             "tools": tools,
-            "aiClient": ai_client,
-            "memory": memory_instance
+            "aiClient": ai_client
         })
         print("AI 助手初始化完成")
     except Exception as e:
