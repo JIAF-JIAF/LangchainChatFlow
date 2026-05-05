@@ -39,3 +39,7 @@ def submit_form(
     print(f"客户信息: 姓名={name}, 电话={phone}, 微信={wechat}, 地址={address}")
 
     return f"✅ 表单提交成功\n客户姓名: {name}\n联系电话: {phone}\n咨询意图: {intention}\n微信号: {wechat or '未提供'}\n地址: {address or '未提供'}"
+
+
+from .tool_factory import ToolFactory
+ToolFactory.register_tool(submit_form)

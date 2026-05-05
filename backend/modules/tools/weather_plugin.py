@@ -59,3 +59,7 @@ def get_weather(city: str) -> str:
 
     except Exception as e:
         return f"查询天气失败: {str(e)}"
+
+
+from .tool_factory import ToolFactory
+ToolFactory.register_tool(get_weather)

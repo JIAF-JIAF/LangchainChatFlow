@@ -12,9 +12,9 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 
 from modules.ai_client import AIClient
-from modules.store.vector_store import VectorStore
+from modules.vector_stores import VectorStoreFactory
 from modules.assistant import Agent
-from modules.tools import get_all_tools
+from modules.tools import ToolFactory
 from modules.prompt import create_chat_prompt
 
 if sys.stdout.encoding != 'utf-8':
@@ -60,7 +60,7 @@ def init_system():
 
     print("\n[2/3] 初始化知识库...")
     try:
-        vector_store_instance = VectorStore(ai_client=ai_client)
+        vector_store_instance = VectorStoreFactory.from_config("config.json", ai_client=ai_client)
         kb_data = vector_store_instance.init_knowledge_base()
         if kb_data["status"] == "error":
             print(f"知识库加载失败: {kb_data.get('message', '未知错误')}")
@@ -73,7 +73,7 @@ def init_system():
 
     print("\n[3/3] 初始化 AI 助手...")
     try:
-        tools = get_all_tools()
+        tools = ToolFactory.get_all_tools()
 
         assistant_instance = Agent(options={
             "prompt": create_chat_prompt(),
