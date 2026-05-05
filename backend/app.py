@@ -39,7 +39,11 @@ sessions = {}
 
 
 def init_system():
-    """初始化系统组件"""
+    """初始化系统组件。
+
+    按顺序初始化 AI 客户端、知识库和 AI 助手，
+    确保所有组件正常启动后提供服务。
+    """
     global assistant_instance, vector_store_instance
 
     print("=" * 50)
@@ -94,7 +98,13 @@ def init_system():
 
 @app.route('/start', methods=['GET'])
 def start():
-    """检查服务状态"""
+    """检查服务状态。
+
+    返回服务是否就绪，以及知识库初始化状态。
+
+    Returns:
+        JSON 响应，包含 status、message、model 和 knowledge_base 字段
+    """
     try:
         status = {
             "status": "ready",
@@ -112,7 +122,17 @@ def start():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """处理对话请求"""
+    """处理对话请求。
+
+    接收用户消息，调用 Agent 处理并返回回复。
+
+    Request Body:
+        message (str): 用户输入的消息内容
+        session_id (str, optional): 会话 ID，默认自动生成
+
+    Returns:
+        JSON 响应，包含 reply、tool_calls、session_id 和 finished 字段
+    """
     try:
         data = request.get_json()
         if not data or 'message' not in data:

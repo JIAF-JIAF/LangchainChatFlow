@@ -44,7 +44,13 @@ class LLMClient:
         self._init_clients()
 
     def _load_from_config(self):
-        """从配置文件加载"""
+        """从配置文件加载 API 配置。
+
+        从指定的配置文件路径读取 API 密钥、base_url 和 model 等配置。
+
+        Raises:
+            Exception: 读取或解析配置文件失败时抛出
+        """
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
@@ -57,7 +63,10 @@ class LLMClient:
             raise
 
     def _init_clients(self):
-        """初始化 LangChain 客户端"""
+        """初始化 LangChain ChatOpenAI 客户端。
+
+        使用配置文件中的 model、api_key 和 base_url 创建 ChatOpenAI 实例。
+        """
         self._client = ChatOpenAI(
             model=self.model,
             api_key=self.api_key,
@@ -79,7 +88,14 @@ class LLMClient:
         return self._embedding_client
 
     def create_embedding(self, text: str) -> list[float]:
-        """创建文本嵌入"""
+        """创建文本嵌入向量。
+
+        Args:
+            text: 要嵌入的文本内容
+
+        Returns:
+            文本的嵌入向量表示，失败时返回空列表
+        """
         try:
             client = OpenAI(api_key=self.api_key, base_url=self.base_url)
             response = client.embeddings.create(

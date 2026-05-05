@@ -31,13 +31,24 @@ class Agent:
         self._build_agent()
 
     def _get_chat_history(self, session_id: str) -> InMemoryChatMessageHistory:
-        """获取或创建会话历史（供 RunnableWithMessageHistory 使用）"""
+        """获取或创建会话历史。
+
+        Args:
+            session_id: 会话 ID
+
+        Returns:
+            对应会话 ID 的聊天历史记录对象
+        """
         if session_id not in self._chat_history_store:
             self._chat_history_store[session_id] = InMemoryChatMessageHistory()
         return self._chat_history_store[session_id]
 
     def _build_agent(self):
-        """构建 Agent（使用 create_tool_calling_agent）"""
+        """构建 Agent。
+
+        使用 create_tool_calling_agent 创建 agent，
+        并配置 RunnableWithMessageHistory 以支持多会话对话历史管理。
+        """
         tools = [self.vector_store.retrieve_knowledge] + self._tools
 
         self._agent = create_tool_calling_agent(
@@ -61,7 +72,15 @@ class Agent:
         )
 
     def invoke(self, input: str, session_id: str = "default") -> Dict[str, Any]:
-        """执行 Agent"""
+        """执行 Agent 处理用户输入。
+
+        Args:
+            input: 用户输入的文本
+            session_id: 会话 ID，用于管理对话历史，默认 "default"
+
+        Returns:
+            包含 answer、intermediate_steps 和 tool_messages 的字典
+        """
         result = self._agent_chain.invoke(
             {"input": input},
             config={"configurable": {"session_id": session_id}}
@@ -74,7 +93,15 @@ class Agent:
         }
 
     def process_message(self, session_id, user_message):
-        """发送对话（兼容原有接口）"""
+        """发送对话（兼容原有接口）。
+
+        Args:
+            session_id: 会话 ID
+            user_message: 用户消息内容
+
+        Returns:
+            包含 content 和 tool_calls 的字典
+        """
         result = self.invoke(user_message, session_id)
         return {
             "content": result["answer"],
