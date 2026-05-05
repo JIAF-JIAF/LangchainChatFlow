@@ -20,15 +20,28 @@ LangchainChatFlow/
 │   ├── config.json            # 系统配置
 │   ├── requirements.txt       # Python 依赖
 │   ├── modules/               # 核心功能模块
+│   │   ├── __init__.py       # 模块包初始化
 │   │   ├── ai_client.py       # AI 客户端（兼容 OpenAI SDK）
 │   │   ├── assistant.py       # AI 助手/Agent
-│   │   ├── store/             # 存储模块
-│   │   │   └── vector_store.py # 向量数据库管理
+│   │   ├── document_loaders/  # 文档加载器
+│   │   │   ├── __init__.py
+│   │   │   ├── loader_factory.py
+│   │   │   ├── text_loader.py
+│   │   │   ├── pdf_loader.py
+│   │   │   └── docx_loader.py
+│   │   ├── vector_stores/     # 向量存储
+│   │   │   ├── __init__.py
+│   │   │   ├── base_vector_store.py  # 向量存储基类
+│   │   │   ├── chroma_store.py       # Chroma 实现
+│   │   │   ├── milvus_store.py       # Milvus 实现
+│   │   │   └── store_factory.py      # 存储工厂
 │   │   ├── prompt/            # Prompt 模板管理
-│   │   └── tools/              # 工具插件
-│   │       ├── weather_plugin.py         # 天气查询
-│   │       ├── weather_recommend_plugin.py # 天气推荐
-│   │       └── submit_form_plugin.py     # 表单提交
+│   │   └── tools/             # 工具插件
+│   │       ├── __init__.py
+│   │       ├── tool_factory.py
+│   │       ├── weather_plugin.py
+│   │       ├── weather_recommend_plugin.py
+│   │       └── submit_form_plugin.py
 │   ├── knowledge_base/        # 知识库文档目录
 │   └── db/                    # 向量数据库存储目录
 │
@@ -196,7 +209,7 @@ npm run dev
 
 - [x] 缓存机制
 - [x] 多轮对话优化
-- [ ] 支持更多向量数据库
+- [x] 支持更多向量数据库
 - [ ] 数据库替代 JSON 存储
 - [ ] API 限流和安全验证
 - [ ] Docker 容器化部署
