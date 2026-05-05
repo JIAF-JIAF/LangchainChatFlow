@@ -58,10 +58,12 @@ def init_system():
     try:
         vector_store_instance = VectorStore(ai_client=ai_client)
         kb_data = vector_store_instance.init_knowledge_base()
-        if kb_data is None:
-            print("知识库为空或不存在，将跳过 RAG 检索")
+        if kb_data["status"] == "error":
+            print(f"知识库加载失败: {kb_data.get('message', '未知错误')}")
+        elif kb_data["status"] == "empty":
+            print("知识库为空，将跳过 RAG 检索")
         else:
-            print("知识库初始化完成")
+            print(f"知识库初始化完成，共 {kb_data['count']} 个向量")
     except Exception as e:
         print("知识库初始化警告: {}".format(e))
 

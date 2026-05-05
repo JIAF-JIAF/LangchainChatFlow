@@ -28,23 +28,15 @@ class LLMClient:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        model: str = "deepseek-v4-pro",
         config_path: Optional[str] = None,
         temperature: float = 0.7
     ):
-        self.api_key = api_key
-        self.base_url = base_url
-        self.model = model
         self.temperature = temperature
         self.config_path = config_path
         self._client: Optional[ChatOpenAI] = None
         self._embedding_client: Optional[LangChainEmbeddings] = None
 
-        if api_key and base_url:
-            pass
-        elif config_path:
+        if config_path:
             self._load_from_config()
         else:
             raise ValueError("请提供 API 密钥和 base_url 或配置文件路径")
@@ -58,7 +50,7 @@ class LLMClient:
                 config = json.load(f)
             self.api_key = config.get('api_key')
             self.base_url = config.get('base_url')
-            self.model = config.get('model', self.model)
+            self.model = config.get('model')
             print(f"从配置文件 {self.config_path} 读取 API 配置")
         except Exception as e:
             print(f"读取配置文件失败: {e}")

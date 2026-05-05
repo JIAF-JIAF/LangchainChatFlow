@@ -4,15 +4,9 @@ LangChain Agent 模块
 """
 
 from typing import Optional, Dict, Any, List
-from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.chat_history import InMemoryChatMessageHistory
-from langchain_core.prompts.chat import MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
-
-from .ai_client import LLMClient
-from .tools import get_all_tools
-from .store.vector_store import VectorStore
-from .prompt import CUSTOMER_SERVICE_PROMPT_TEMPLATE, create_chat_prompt
+from langchain.agents import create_tool_calling_agent, AgentExecutor
 
 
 class Agent:
@@ -34,10 +28,7 @@ class Agent:
         self.verbose = True
         self._chat_history_store: Dict[str, InMemoryChatMessageHistory] = {}
 
-        if not self._tools:
-            self._tools = get_all_tools()
-
-        self._build_rag_chain()
+        self._build_agent()
 
     def _get_chat_history(self, session_id: str) -> InMemoryChatMessageHistory:
         """获取或创建会话历史（供 RunnableWithMessageHistory 使用）"""
@@ -45,61 +36,50 @@ class Agent:
             self._chat_history_store[session_id] = InMemoryChatMessageHistory()
         return self._chat_history_store[session_id]
 
-    def _build_rag_chain(self):
-        """构建 RAG Chain（纯 LCEL 方式）"""
-        try:
-            retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
-            self._rag_chain = (
-                {
-                    "input": lambda x: x["input"],
-                    "context": retriever | (lambda docs: "\n\n".join([d.page_content for d in docs]))
-                }
-                | self.prompt
-                | self.llm_client.chat
-            )
-            print("RAG Chain 构建成功，检索 top3 相关块")
-        except Exception as e:
-            print(f"警告：RAG 初始化失败 ({e})，使用纯对话模式")
-            self._rag_chain = (
-                {
-                    "input": lambda x: x["input"],
-                    "context": lambda x: "（当前无知识库数据）"
-                }
-                | self.prompt
-                | self.llm_client.chat
-            )
+    def _build_agent(self):
+        """构建 Agent（使用 create_tool_calling_agent）"""
+        tools = [self.vector_store.retrieve_knowledge] + self._tools
 
-        self._rag_chain = RunnableWithMessageHistory(
-            self._rag_chain,
+        self._agent = create_tool_calling_agent(
+            llm=self.llm_client.chat,
+            tools=tools,
+            prompt=self.prompt
+        )
+
+        self._agent_executor = AgentExecutor(
+            agent=self._agent,
+            tools=tools,
+            verbose=self.verbose,
+            handle_parsing_errors=True
+        )
+
+        self._agent_chain = RunnableWithMessageHistory(
+            self._agent_executor,
             self._get_chat_history,
             input_messages_key="input",
             history_messages_key="chat_history"
         )
 
     def invoke(self, input: str, session_id: str = "default") -> Dict[str, Any]:
-        """执行 Agent（RAG 模式）"""
-        result = self._rag_chain.invoke(
+        """执行 Agent"""
+        result = self._agent_chain.invoke(
             {"input": input},
             config={"configurable": {"session_id": session_id}}
         )
 
         return {
-            "answer": result.content if hasattr(result, 'content') else str(result),
-            "intermediate_steps": [],
+            "answer": result["output"] if hasattr(result, 'output') else str(result),
+            "intermediate_steps": result.get("intermediate_steps", []),
             "tool_messages": []
         }
 
-    def chat(self, session_id, user_message):
+    def process_message(self, session_id, user_message):
         """发送对话（兼容原有接口）"""
         result = self.invoke(user_message, session_id)
         return {
             "content": result["answer"],
             "tool_calls": []
         }
-
-    def process_message(self, session_id, user_message):
-        """处理完整对话流程"""
-        return self.chat(session_id, user_message)
 
 
 __all__ = ['Agent']
