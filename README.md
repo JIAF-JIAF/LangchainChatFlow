@@ -8,6 +8,7 @@
 - **RAG 增强检索**: 检索增强生成技术，提升 AI 回答的准确性和相关性
 - **上下文管理**: 独立会话管理，支持多轮对话和上下文记忆
 - **工具调用**: AI 自动判断并调用外部工具（天气查询、天气推荐、表单提交），支持链式调用
+- **FewShot 示例学习**: 基于 LengthBasedExampleSelector 的动态示例选择，根据输入长度自动裁剪示例
 - **前后端分离**: React + Vite 前端 + Flask 后端
 - **模块化设计**: 清晰的后端架构，易于扩展
 
@@ -31,11 +32,12 @@ LangchainChatFlow/
 │   │   │   └── docx_loader.py
 │   │   ├── vector_stores/     # 向量存储
 │   │   │   ├── __init__.py
-│   │   │   ├── base_vector_store.py  # 向量存储基类
+│   │   │   ├── base_vector_store.py  # 向量存储基类（含工具方法）
 │   │   │   ├── chroma_store.py       # Chroma 实现
 │   │   │   ├── milvus_store.py       # Milvus 实现
 │   │   │   └── store_factory.py      # 存储工厂
 │   │   ├── prompt/            # Prompt 模板管理
+│   │   │   └── __init__.py   # 包含 FewShot 和 LengthBasedExampleSelector
 │   │   └── tools/             # 工具插件
 │   │       ├── __init__.py
 │   │       ├── tool_factory.py
@@ -167,12 +169,34 @@ npm run dev
 3. **开始对话**: 访问前端地址，与智能客服对话
 4. **RAG 增强**: 系统自动从知识库检索相关内容，增强 AI 回答
 5. **工具调用**: AI 自动调用天气查询、推荐或表单提交等工具
+6. **FewShot 学习**: 系统使用默认示例对话，也可自定义示例
 
 ## 自定义扩展
 
 ### 修改系统提示词
 
 编辑 `backend/modules/prompt/__init__.py` 中的 `CUSTOMER_SERVICE_PROMPT_TEMPLATE` 变量
+
+### 自定义 FewShot 示例
+
+在 `backend/modules/prompt/__init__.py` 中修改 `DEFAULT_FEW_SHOT_EXAMPLES` 列表：
+
+```python
+DEFAULT_FEW_SHOT_EXAMPLES = [
+    {"user_query": "你好", "assistant_response": "您好！请问有什么可以帮助您的？"},
+    {"user_query": "你们有什么产品?", "assistant_response": "我们提供多种优质产品..."},
+]
+```
+
+或在使用时传入自定义示例：
+
+```python
+from modules.prompt import create_few_shot_prompt
+
+prompt = create_few_shot_prompt(examples=[
+    {"user_query": "问题", "assistant_response": "回答"}
+])
+```
 
 ### 添加新工具
 
@@ -194,6 +218,9 @@ npm run dev
 - OpenAI SDK 1.12.0 - AI API 客户端（兼容阿里云百炼）
 - Flask-CORS - 跨域支持
 - numpy 2.4.4 - 数值计算
+- LangChain >= 0.3.0 - Agent 和工具框架
+- LangChain Core >= 0.3.0 - 核心组件
+- LangChain Community >= 0.3.0 - 社区组件
 
 **前端:**
 - React 18 - UI 框架
@@ -205,11 +232,16 @@ npm run dev
 - qwen-plus 模型
 - text-embedding-v3 向量化模型
 
+**向量数据库:**
+- Chroma - 默认向量存储
+- Milvus - 可选向量存储
+
 ## 后续优化
 
 - [x] 缓存机制
 - [x] 多轮对话优化
 - [x] 支持更多向量数据库
+- [x] FewShot 示例学习
 - [ ] 数据库替代 JSON 存储
 - [ ] API 限流和安全验证
 - [ ] Docker 容器化部署
