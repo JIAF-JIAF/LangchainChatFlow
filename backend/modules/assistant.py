@@ -49,7 +49,9 @@ class Agent:
         使用 create_tool_calling_agent 创建 agent，
         并配置 RunnableWithMessageHistory 以支持多会话对话历史管理。
         """
-        tools = [self.vector_store.retrieve_knowledge] + self._tools
+        # 获取检索知识工具（使用绑定好的工具实例）
+        retrieve_tool = self.vector_store.get_retrieve_knowledge_tool()
+        tools = [retrieve_tool] + self._tools
 
         self._agent = create_tool_calling_agent(
             llm=self.llm_client.chat,

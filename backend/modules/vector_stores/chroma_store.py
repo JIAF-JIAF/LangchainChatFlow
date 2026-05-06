@@ -190,27 +190,6 @@ class ChromaVectorStore(BaseVectorStore):
             search_kwargs=search_kwargs or {"k": 3}
         )
 
-    @tool("retrieve_knowledge")
-    def retrieve_knowledge(self, query: str) -> str:
-        """
-        从知识库检索相关知识（作为工具供 Agent 调用）
-        
-        Args:
-            query: 查询文本
-            
-        Returns:
-            检索到的知识内容
-        """
-        if not self.vector_store:
-            return "知识库未初始化"
-
-        results = self.similarity_search(query, k=3)
-        if not results:
-            return "未找到相关知识"
-
-        knowledge = "\n\n".join([doc.page_content for doc in results])
-        return f"检索到的相关知识:\n{knowledge}"
-
     def persist(self) -> None:
         """
         持久化向量存储到磁盘

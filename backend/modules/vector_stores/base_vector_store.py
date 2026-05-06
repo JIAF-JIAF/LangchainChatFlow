@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.tools import StructuredTool
 from modules.document_loaders import DocumentLoaderFactory
 
 
@@ -169,6 +170,39 @@ class BaseVectorStore(ABC):
             包含向量数量等统计信息的字典
         """
         pass
+    
+    def retrieve_knowledge(self, query: str) -> str:
+        """
+        从知识库检索相关知识（作为工具供 Agent 调用）
+        
+        Args:
+            query: 查询文本
+            
+        Returns:
+            检索到的知识内容
+        """
+        try:
+            results = self.similarity_search(query, k=3)
+            if not results:
+                return "未找到相关知识"
+            
+            knowledge = "\n\n".join([doc.page_content for doc in results])
+            return f"检索到的相关知识:\n{knowledge}"
+        except Exception as e:
+            return f"知识库检索失败: {str(e)}"
+    
+    def get_retrieve_knowledge_tool(self):
+        """
+        获取检索知识的工具（用于 Agent）
+        
+        Returns:
+            LangChain Tool 实例
+        """
+        return StructuredTool.from_function(
+            func=self.retrieve_knowledge,
+            name="retrieve_knowledge",
+            description="从知识库检索相关知识"
+        )
 
 
 __all__ = ['BaseVectorStore']

@@ -15,7 +15,7 @@ from modules.ai_client import AIClient
 from modules.vector_stores import VectorStoreFactory
 from modules.assistant import Agent
 from modules.tools import ToolFactory
-from modules.prompt import create_chat_prompt
+from modules.prompt import create_few_shot_prompt
 
 if sys.stdout.encoding != 'utf-8':
     import codecs
@@ -76,7 +76,7 @@ def init_system():
         tools = ToolFactory.get_all_tools()
 
         assistant_instance = Agent(options={
-            "prompt": create_chat_prompt(),
+            "prompt": create_few_shot_prompt(),  # 使用默认示例
             "vectorStore": vector_store_instance,
             "tools": tools,
             "aiClient": ai_client
