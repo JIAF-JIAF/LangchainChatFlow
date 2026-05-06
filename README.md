@@ -78,6 +78,7 @@ pip install -r requirements.txt
 
 # 配置 API 密钥
 # 编辑 config.json 文件，填入你的 API Key
+# 支持阿里云百炼 API（推荐）或 OpenAI API
 
 # 启动服务
 python app.py
