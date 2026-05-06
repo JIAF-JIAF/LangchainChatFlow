@@ -5,6 +5,10 @@ Tools package
 
 from .tool_factory import ToolFactory
 
+from . import weather_plugin
+from . import weather_recommend_plugin
+from . import submit_form_plugin
+
 __all__ = [
     'ToolFactory',
 ]

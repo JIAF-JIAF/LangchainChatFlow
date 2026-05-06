@@ -16,6 +16,7 @@ from modules.vector_stores import VectorStoreFactory
 from modules.assistant import Agent
 from modules.tools import ToolFactory
 from modules.prompt import create_few_shot_prompt
+from modules.rate_limit import RateLimiter
 
 if sys.stdout.encoding != 'utf-8':
     import codecs
@@ -32,6 +33,9 @@ app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 app.config['JSONIFY_MIMETYPE'] = 'application/json; charset=utf-8'
 CORS(app)
+
+rate_limiter = RateLimiter(config_path="config.json")
+rate_limiter.init_app(app)
 
 assistant_instance = None
 vector_store_instance = None
@@ -97,6 +101,7 @@ def init_system():
 
 
 @app.route('/start', methods=['GET'])
+@rate_limiter.limit("start_limit")
 def start():
     """检查服务状态。
 
@@ -121,6 +126,7 @@ def start():
 
 
 @app.route('/chat', methods=['POST'])
+@rate_limiter.limit("chat_limit")
 def chat():
     """处理对话请求。
 
@@ -164,6 +170,14 @@ def chat():
         return jsonify({
             "error": str(e)
         }), 500
+
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify({
+        "error": "请求过于频繁，请稍后再试",
+        "message": str(e.description)
+    }), 429
 
 
 if __name__ == '__main__':

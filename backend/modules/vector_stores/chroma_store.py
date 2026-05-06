@@ -99,6 +99,8 @@ class ChromaVectorStore(BaseVectorStore):
             )
             count = self.vector_store._collection.count()
             print(f"Chroma 向量存储加载成功，共 {count} 个向量")
+            if count == 0:
+                return False
             return True
         except Exception as e:
             print(f"加载 Chroma 向量存储失败: {e}")
