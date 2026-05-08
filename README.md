@@ -1,6 +1,6 @@
 # 智能客服系统
 
-基于 AI 的智能客服系统，采用前后端分离架构，支持知识库检索（RAG）、工具调用和多轮对话。
+基于 AI 的智能客服系统，采用前后端分离架构，支持知识库检索（RAG）、工具调用和多轮对话。系统已迁移至 **MCP（Model Context Protocol）** 架构，支持工具的独立部署和多 Agent 共享调用。
 
 ## 特色功能
 
@@ -8,7 +8,9 @@
 - **RAG 增强检索**: 检索增强生成技术，提升 AI 回答的准确性和相关性
 - **上下文管理**: 独立会话管理，支持多轮对话和上下文记忆
 - **工具调用**: AI 自动判断并调用外部工具（天气查询、天气推荐、表单提交），支持链式调用
-- **FewShot 示例学习**: 基于 LengthBasedExampleSelector 的动态示例选择，根据输入长度自动裁剪示例
+- **MCP 架构**: 工具独立部署，支持多个 Agent 共享调用
+- **Streamable HTTP**: 基于 HTTP 的流式传输协议，支持实时响应
+- **FewShot 示例学习**: 基于 LengthBasedExampleSelector 的动态示例选择
 - **前后端分离**: React + Vite 前端 + Flask 后端
 - **模块化设计**: 清晰的后端架构，易于扩展
 
@@ -38,9 +40,18 @@ LangchainChatFlow/
 │   │   │   └── store_factory.py      # 存储工厂
 │   │   ├── prompt/            # Prompt 模板管理
 │   │   │   └── __init__.py   # 包含 FewShot 和 LengthBasedExampleSelector
-│   │   └── tools/             # 工具插件
+│   │   └── rate_limit.py      # 限流模块
+│   ├── mcp_module/            # MCP 模块（工具服务）
+│   │   ├── __init__.py        # MCP 模块初始化
+│   │   ├── config.py          # MCP 配置常量
+│   │   ├── logger.py          # 统一日志模块
+│   │   ├── mcp_server.py      # MCP 服务器核心
+│   │   ├── mcp_client.py      # MCP 客户端
+│   │   ├── mcp_service.py     # MCP 服务封装
+│   │   ├── start.py           # MCP 服务器启动脚本
+│   │   └── tools/             # 工具插件目录
 │   │       ├── __init__.py
-│   │       ├── tool_factory.py
+│   │       ├── registry.py     # 工具注册中心
 │   │       ├── weather_plugin.py
 │   │       ├── weather_recommend_plugin.py
 │   │       └── submit_form_plugin.py
@@ -62,19 +73,33 @@ LangchainChatFlow/
 
 ### 环境要求
 
-- Python >= 3.8
+- Python >= 3.10
 - Node.js >= 16
 - npm 或 yarn
 - 阿里云百炼 API 密钥（或 OpenAI API）
 
 ### 后端启动
 
+**第一步：启动 MCP 服务**
+
 ```bash
 # 进入后端目录
 cd backend
 
-# 安装依赖
+# 安装依赖（首次运行）
 pip install -r requirements.txt
+
+# 启动 MCP 服务器（独立部署）
+python mcp_module/start.py
+```
+
+MCP 服务器运行在: `http://localhost:8080/mcp`
+
+**第二步：启动应用服务**
+
+```bash
+# 新开终端，进入后端目录
+cd backend
 
 # 配置 API 密钥
 # 编辑 config.json 文件，填入你的 API Key
@@ -125,6 +150,22 @@ npm run dev
 | model | 对话模型名称 |
 | embedding_model | 向量化模型名称 |
 
+### MCP 配置
+
+MCP 服务器配置位于 `backend/mcp_module/config.py`:
+
+```python
+# MCP 服务器配置
+MCP_HOST = "0.0.0.0"
+MCP_PORT = 8080
+MCP_PATH = "/mcp"
+MCP_URL = f"http://127.0.0.1:{MCP_PORT}{MCP_PATH}"
+
+# 应用服务器配置
+APP_HOST = "0.0.0.0"
+APP_PORT = 5000
+```
+
 ## API 接口
 
 ### GET /start
@@ -163,14 +204,73 @@ npm run dev
 }
 ```
 
+## MCP 架构说明
+
+### MCP 服务器
+
+MCP（Model Context Protocol）服务器负责管理和提供工具服务：
+
+```
+┌─────────────────────────────────────────────────────┐
+│                MCP 服务器 (8080端口)                 │
+│  ┌─────────────────────────────────────────────┐   │
+│  │           工具注册表 (_TOOL_REGISTRY)          │   │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────────┐   │   │
+│  │  │get_weather│ │get_weather_forecast│ │submit_form│ │   │
+│  │  └────┬────┘ └────┬────┘ └──────┬──────┘   │   │
+│  └───────┼───────────┼─────────────┼───────────┘   │
+│          │           │             │               │
+│          └───────────┼─────────────┘               │
+│                      ↓                             │
+│            ┌─────────────────┐                     │
+│            │  FastMCP Server │ ← Streamable HTTP   │
+│            └─────────────────┘                     │
+└─────────────────────────────────────────────────────┘
+                          ↑
+                          │ HTTP 请求
+                          ↓
+┌─────────────────────────────────────────────────────┐
+│              应用服务器 (5000端口)                    │
+│  ┌─────────────┐    ┌─────────────┐                │
+│  │   Agent     │←───│MCPToolService│                │
+│  │             │    │   (客户端)   │                │
+│  └─────────────┘    └─────────────┘                │
+└─────────────────────────────────────────────────────┘
+```
+
+### 工具注册机制
+
+工具通过装饰器注册到全局注册表：
+
+```python
+from mcp_module.tools.registry import register_tool
+
+@register_tool(
+    name="get_weather",
+    description="查询指定城市的实时天气",
+    parameters=[
+        {
+            "name": "city",
+            "type": "string",
+            "description": "要查询天气的城市名称",
+            "required": True
+        }
+    ],
+    return_type="string"
+)
+def get_weather(city: str) -> str:
+    # 工具实现...
+```
+
 ## 使用流程
 
 1. **准备知识库**: 在 `backend/knowledge_base/` 目录添加文档（支持 .txt、.pdf）
-2. **启动服务**: 按上述步骤启动前后端
-3. **开始对话**: 访问前端地址，与智能客服对话
-4. **RAG 增强**: 系统自动从知识库检索相关内容，增强 AI 回答
-5. **工具调用**: AI 自动调用天气查询、推荐或表单提交等工具
-6. **FewShot 学习**: 系统使用默认示例对话，也可自定义示例
+2. **启动 MCP 服务器**: `python backend/mcp_module/start.py`
+3. **启动应用服务器**: `python backend/app.py`
+4. **开始对话**: 访问前端地址，与智能客服对话
+5. **RAG 增强**: 系统自动从知识库检索相关内容，增强 AI 回答
+6. **工具调用**: AI 通过 MCP 服务器调用天气查询、推荐或表单提交等工具
+7. **FewShot 学习**: 系统使用默认示例对话，也可自定义示例
 
 ## 自定义扩展
 
@@ -189,23 +289,26 @@ DEFAULT_FEW_SHOT_EXAMPLES = [
 ]
 ```
 
-或在使用时传入自定义示例：
-
-```python
-from modules.prompt import create_few_shot_prompt
-
-prompt = create_few_shot_prompt(examples=[
-    {"user_query": "问题", "assistant_response": "回答"}
-])
-```
-
 ### 添加新工具
 
-1. 在 `backend/modules/tools/` 创建插件文件，继承 `BaseTool` 基类
-2. 定义工具的名称、描述和执行逻辑
-3. 在插件文件末尾导出工具实例
-4. 在 `backend/modules/tools/__init__.py` 中注册工具
-5. 重启服务
+1. 在 `backend/mcp_module/tools/` 创建插件文件
+2. 使用 `@register_tool` 装饰器注册工具
+3. 在 `start.py` 中导入工具模块
+4. 重启 MCP 服务
+
+```python
+# 示例工具插件
+from mcp_module.tools.registry import register_tool
+
+@register_tool(
+    name="my_tool",
+    description="我的自定义工具",
+    parameters=[...],
+    return_type="string"
+)
+def my_tool(param1: str) -> str:
+    return "工具执行结果"
+```
 
 ### 更新知识库
 
@@ -222,6 +325,7 @@ prompt = create_few_shot_prompt(examples=[
 - LangChain >= 0.3.0 - Agent 和工具框架
 - LangChain Core >= 0.3.0 - 核心组件
 - LangChain Community >= 0.3.0 - 社区组件
+- MCP - Model Context Protocol（工具服务协议）
 
 **前端:**
 - React 18 - UI 框架
@@ -239,10 +343,11 @@ prompt = create_few_shot_prompt(examples=[
 
 ## 后续优化
 
-- [x] 缓存机制
-- [x] 多轮对话优化
-- [x] 支持更多向量数据库
-- [x] FewShot 示例学习
+- [x] MCP 架构迁移
+- [x] 工具独立部署
+- [x] Streamable HTTP 支持
+- [x] 统一日志模块
+- [x] 集中配置管理
 - [ ] 数据库替代 JSON 存储
 - [ ] API 限流和安全验证
 - [ ] Docker 容器化部署
