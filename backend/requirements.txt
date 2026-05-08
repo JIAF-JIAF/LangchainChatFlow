@@ -19,3 +19,6 @@ dashscope>=1.20.0
 
 # Milvus Lite 向量数据库
 pymilvus>=2.4.0
+
+# MCP (Model Context Protocol) 工具
+mcp>=1.0.0

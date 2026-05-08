@@ -14,9 +14,9 @@ from dotenv import load_dotenv
 from modules.ai_client import AIClient
 from modules.vector_stores import VectorStoreFactory
 from modules.assistant import Agent
-from modules.tools import ToolFactory
 from modules.prompt import create_few_shot_prompt
 from modules.rate_limit import RateLimiter
+from mcp_module import MCPToolService, config
 
 if sys.stdout.encoding != 'utf-8':
     import codecs
@@ -77,7 +77,7 @@ def init_system():
 
     print("\n[3/3] 初始化 AI 助手...")
     try:
-        tools = ToolFactory.get_all_tools()
+        tools = MCPToolService.get_tools(config.MCP_URL)
 
         assistant_instance = Agent(options={
             "prompt": create_few_shot_prompt(),  # 使用默认示例
@@ -140,6 +140,7 @@ def chat():
         JSON 响应，包含 reply、tool_calls、session_id 和 finished 字段
     """
     try:
+        print("\n[DEBUG] /chat 路由被调用", flush=True)
         data = request.get_json()
         if not data or 'message' not in data:
             return jsonify({
@@ -149,8 +150,8 @@ def chat():
         user_message = data['message']
         session_id = data.get('session_id', str(uuid.uuid4()))
 
-        print("\n[对话请求] Session: {}".format(session_id))
-        print("用户: {}".format(user_message))
+        print("\n[对话请求] Session: {}".format(session_id), flush=True)
+        print("用户: {}".format(user_message), flush=True)
 
         result = assistant_instance.process_message(session_id, user_message)
 

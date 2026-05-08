@@ -49,34 +49,41 @@ class ChromaVectorStore(BaseVectorStore):
         Returns:
             包含 status、message、count 等信息的字典
         """
+        # 检查源目录，不存在则自动创建
+        if not source_dir:
+            return {"status": "error", "message": "源目录不能为空"}
+        
+        if not os.path.exists(source_dir):
+            print(f"源目录不存在，自动创建: {source_dir}")
+            os.makedirs(source_dir, exist_ok=True)
+        
         # 尝试加载已存在的向量存储
         if self.load_vector_store():
             stats = self.get_collection_stats()
+            vector_count = stats.get("vector_count", 0)
+            
+            # 如果已存在向量，直接返回
+            if vector_count > 0:
+                return {
+                    "status": "loaded",
+                    "message": f"成功加载已存在的知识库",
+                    "count": vector_count
+                }
+            # 向量数为0，需要从源目录重新创建
+        
+        # 从源目录创建新知识库（覆盖：向量存储不存在 或 向量数为0）
+        if self._load_and_embed_documents(source_dir):
+            stats = self.get_collection_stats()
             return {
-                "status": "loaded",
-                "message": f"成功加载已存在的知识库",
+                "status": "created",
+                "message": "成功创建新知识库",
                 "count": stats.get("vector_count", 0)
             }
         
-        # 如果不存在，尝试从源目录创建
-        if source_dir and os.path.exists(source_dir):
-            if self._load_and_embed_documents(source_dir):
-                stats = self.get_collection_stats()
-                return {
-                    "status": "created",
-                    "message": "成功创建新知识库",
-                    "count": stats.get("vector_count", 0)
-                }
-            else:
-                return {
-                    "status": "error",
-                    "message": "创建知识库失败"
-                }
-        else:
-            return {
-                "status": "empty",
-                "message": "源目录不存在，知识库为空"
-            }
+        return {
+            "status": "error",
+            "message": "创建知识库失败"
+        }
 
     def load_vector_store(self) -> bool:
         """

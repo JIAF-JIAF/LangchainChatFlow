@@ -104,6 +104,7 @@ class Agent:
         Returns:
             包含 content 和 tool_calls 的字典
         """
+        print(f"\n[Agent] 收到消息 - Session: {session_id}, Message: {user_message}", flush=True)
         result = self.invoke(user_message, session_id)
         return {
             "content": result["answer"],
