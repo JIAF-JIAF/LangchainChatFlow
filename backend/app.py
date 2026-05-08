@@ -12,7 +12,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 
 from modules.ai_client import AIClient
-from modules.vector_stores import VectorStoreFactory
+from modules.rag import RAGChain
 from modules.assistant import Agent
 from modules.prompt import create_few_shot_prompt
 from modules.rate_limit import RateLimiter
@@ -38,7 +38,7 @@ rate_limiter = RateLimiter(config_path="config.json")
 rate_limiter.init_app(app)
 
 assistant_instance = None
-vector_store_instance = None
+rag_chain_instance = None
 sessions = {}
 
 
@@ -48,7 +48,7 @@ def init_system():
     按顺序初始化 AI 客户端、知识库和 AI 助手，
     确保所有组件正常启动后提供服务。
     """
-    global assistant_instance, vector_store_instance
+    global assistant_instance, rag_chain_instance
 
     print("=" * 50)
     print("智能客服系统启动中... (LangChain 版本)")
@@ -62,10 +62,14 @@ def init_system():
         print("AI 客户端初始化失败: {}".format(e))
         raise
 
-    print("\n[2/3] 初始化知识库...")
+    print("\n[2/3] 初始化 RAG 知识库...")
     try:
-        vector_store_instance = VectorStoreFactory.from_config("config.json", ai_client=ai_client)
-        kb_data = vector_store_instance.init_knowledge_base()
+        # 创建模块化 RAG 链
+        rag_chain_instance = RAGChain()
+        rag_chain_instance.init_default_modules(ai_client)
+        
+        # 构建知识库索引
+        kb_data = rag_chain_instance.build_index()
         if kb_data["status"] == "error":
             print(f"知识库加载失败: {kb_data.get('message', '未知错误')}")
         elif kb_data["status"] == "empty":
@@ -83,7 +87,7 @@ def init_system():
 
         assistant_instance = Agent(options={
             "prompt": create_few_shot_prompt(),  # 使用默认示例
-            "vectorStore": vector_store_instance,
+            "ragChain": rag_chain_instance,
             "tools": tools,
             "aiClient": ai_client
         })
@@ -117,7 +121,7 @@ def start():
             "status": "ready",
             "message": "客服系统已就绪 (LangChain)",
             "model": "deepseek-v4-pro",
-            "knowledge_base": vector_store_instance is not None
+            "knowledge_base": rag_chain_instance is not None
         }
         return jsonify(status)
     except Exception as e:

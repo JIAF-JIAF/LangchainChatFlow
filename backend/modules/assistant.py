@@ -21,7 +21,7 @@ class Agent:
             options = {}
 
         self.llm_client = options.get('aiClient')
-        self.vector_store = options.get('vectorStore')
+        self.rag_chain = options.get('ragChain')  # 使用模块化 RAG 链
         self._tools = options.get('tools', [])
         self.prompt = options.get('prompt')
 
@@ -49,9 +49,13 @@ class Agent:
         使用 create_tool_calling_agent 创建 agent，
         并配置 RunnableWithMessageHistory 以支持多会话对话历史管理。
         """
-        # 获取检索知识工具（使用绑定好的工具实例）
-        retrieve_tool = self.vector_store.get_retrieve_knowledge_tool()
-        tools = [retrieve_tool] + self._tools
+        # 获取检索知识工具（使用模块化 RAGChain）
+        retrieve_tool = self.rag_chain.get_retrieve_knowledge_tool()
+
+        tools = []
+        if retrieve_tool:
+            tools.append(retrieve_tool)
+        tools.extend(self._tools)
 
         self._agent = create_tool_calling_agent(
             llm=self.llm_client.chat,
