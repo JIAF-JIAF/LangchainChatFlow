@@ -15,7 +15,7 @@
 from .indexer import BaseIndexer, ChromaIndexer, MilvusIndexer
 
 # 检索模块
-from .retriever import BaseRetriever, SimpleVectorRetriever, RerankingRetriever, FilteredRetriever
+from .retriever import BaseRetriever, SimpleVectorRetriever
 
 # 生成模块
 from .generator import BaseGenerator, StuffGenerator, MapReduceGenerator, RefineGenerator
@@ -34,28 +34,26 @@ __all__ = [
     'BaseIndexer',
     'ChromaIndexer',
     'MilvusIndexer',
-    
+
     # 检索模块
     'BaseRetriever',
     'SimpleVectorRetriever',
-    'RerankingRetriever',
-    'FilteredRetriever',
-    
+
     # 生成模块
     'BaseGenerator',
     'StuffGenerator',
     'MapReduceGenerator',
     'RefineGenerator',
-    
+
     # 记忆模块
     'BaseMemory',
     'ConversationMemory',
     'KnowledgeMemory',
-    
+
     # 路由模块
     'BaseRouter',
     'SimpleRouter',
-    
+
     # RAG 链
     'RAGChain'
 ]

@@ -4,8 +4,8 @@
 
 ## 特色功能
 
-- **智能知识库**: 基于向量数据库的语义检索，支持 .txt、.pdf 等文档格式
-- **RAG 增强检索**: 检索增强生成技术，提升 AI 回答的准确性和相关性
+- **智能知识库**: 基于向量数据库的语义检索，支持 .txt、.pdf、.docx 等文档格式
+- **模块化 RAG 框架**: 检索增强生成技术，支持多种索引器、检索器和生成策略组合
 - **上下文管理**: 独立会话管理，支持多轮对话和上下文记忆
 - **工具调用**: AI 自动判断并调用外部工具（天气查询、天气推荐、表单提交），支持链式调用
 - **MCP 架构**: 工具独立部署，支持多个 Agent 共享调用
@@ -17,39 +17,65 @@
 ## 项目结构
 
 ```
-LangchainChatFlow/
+chart-flow-longchain/
 ├── backend/                    # Python 后端 (Flask)
 │   ├── app.py                 # Flask 主应用入口
-│   ├── config.json            # 系统配置
 │   ├── requirements.txt       # Python 依赖
 │   ├── modules/               # 核心功能模块
 │   │   ├── __init__.py       # 模块包初始化
 │   │   ├── ai_client.py       # AI 客户端（兼容 OpenAI SDK）
 │   │   ├── assistant.py       # AI 助手/Agent
+│   │   ├── rag/               # 模块化 RAG 框架
+│   │   │   ├── __init__.py
+│   │   │   ├── rag_chain.py   # RAG 链核心
+│   │   │   ├── indexer/       # 索引模块
+│   │   │   │   ├── base.py    # 索引器基类
+│   │   │   │   ├── chroma.py  # Chroma 实现
+│   │   │   │   └── milvus.py  # Milvus 实现
+│   │   │   ├── retriever/     # 检索模块
+│   │   │   │   ├── base.py    # 检索器基类
+│   │   │   │   ├── simple.py  # 简单向量检索
+│   │   │   │   ├── reranking.py  # 重排序检索
+│   │   │   │   └── filtered.py   # 过滤检索
+│   │   │   ├── generator/     # 生成模块
+│   │   │   │   ├── base.py    # 生成器基类
+│   │   │   │   ├── stuff.py   # Stuff 策略
+│   │   │   │   ├── map_reduce.py  # Map-Reduce 策略
+│   │   │   │   └── refine.py   # Refine 策略
+│   │   │   ├── memory/        # 记忆模块
+│   │   │   │   ├── base.py    # 记忆基类
+│   │   │   │   ├── conversation.py  # 对话记忆
+│   │   │   │   └── knowledge.py     # 知识记忆（预留）
+│   │   │   └── router/        # 路由模块
+│   │   │       ├── base.py    # 路由基类
+│   │   │       └── simple.py  # 简单路由（预留）
 │   │   ├── document_loaders/  # 文档加载器
 │   │   │   ├── __init__.py
 │   │   │   ├── loader_factory.py
 │   │   │   ├── text_loader.py
 │   │   │   ├── pdf_loader.py
-│   │   │   └── docx_loader.py
-│   │   ├── vector_stores/     # 向量存储
+│   │   │   └── docx_loader.py   # 支持多种文档格式加载
+│   │   ├── vector_stores/     # 向量存储（兼容旧接口）
 │   │   │   ├── __init__.py
 │   │   │   ├── base_vector_store.py  # 向量存储基类（含工具方法）
 │   │   │   ├── chroma_store.py       # Chroma 实现
 │   │   │   ├── milvus_store.py       # Milvus 实现
 │   │   │   └── store_factory.py      # 存储工厂
 │   │   ├── prompt/            # Prompt 模板管理
-│   │   │   └── __init__.py   # 包含 FewShot 和 LengthBasedExampleSelector
-│   │   └── rate_limit.py      # 限流模块
+│   │   │   └── __init__.py    # 包含 FewShot 和 LengthBasedExampleSelector
+│   │   └── rate_limit/        # 限流模块
+│   │       ├── __init__.py
+│   │       ├── langchain.py
+│   │       └── rate_limiter.py
 │   ├── mcp_module/            # MCP 模块（工具服务）
-│   │   ├── __init__.py        # MCP 模块初始化
-│   │   ├── config.py          # MCP 配置常量
-│   │   ├── logger.py          # 统一日志模块
-│   │   ├── mcp_server.py      # MCP 服务器核心
-│   │   ├── mcp_client.py      # MCP 客户端
-│   │   ├── mcp_service.py     # MCP 服务封装
-│   │   ├── start.py           # MCP 服务器启动脚本
-│   │   └── tools/             # 工具插件目录
+│   │   ├── __init__.py         # MCP 模块初始化
+│   │   ├── config.py           # MCP 配置常量
+│   │   ├── logger.py           # 统一日志模块
+│   │   ├── mcp_server.py       # MCP 服务器核心
+│   │   ├── mcp_client.py       # MCP 客户端
+│   │   ├── mcp_service.py      # MCP 服务封装
+│   │   ├── start.py            # MCP 服务器启动脚本
+│   │   └── tools/              # 工具插件目录
 │   │       ├── __init__.py
 │   │       ├── registry.py     # 工具注册中心
 │   │       ├── weather_plugin.py
@@ -58,15 +84,90 @@ LangchainChatFlow/
 │   ├── knowledge_base/        # 知识库文档目录
 │   └── db/                    # 向量数据库存储目录
 │
-└── frontend/                   # React 前端 (Vite)
-    ├── src/
-    │   ├── components/         # UI 组件
-    │   │   ├── ChatArea.jsx    # 聊天区域
-    │   │   ├── Header.jsx      # 顶部标题栏
-    │   │   └── InputArea.jsx   # 输入区域
-    │   └── api/
-    │       └── chat.js         # API 调用
-    └── package.json
+├── frontend/                   # React 前端 (Vite)
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ChatArea.jsx
+│   │   │   ├── Header.jsx
+│   │   │   └── InputArea.jsx
+│   │   └── api/
+│   │       └── chat.js
+│   └── package.json
+├── .env                       # 环境变量配置
+└── .gitignore
+```
+
+## 模块化 RAG 框架
+
+系统采用模块化 RAG 架构，将 RAG 流程拆分为可插拔的独立模块，支持自由组合和扩展。
+
+### 模块结构
+
+```
+RAG 流程:
+用户提问 → 路由判断 → 检索文档 → 生成回答 → 返回结果
+           ↓           ↓          ↓
+         Router     Retriever   Generator
+           ↓           ↓          ↓
+         BaseRouter  BaseRetriever  BaseGenerator
+           ↓           ↓          ↓
+       SimpleRouter  SimpleVector  StuffGenerator
+                                   MapReduceGenerator
+                                   RefineGenerator
+```
+
+### 核心模块
+
+| 模块 | 职责 | 基类 | 实现类 |
+|------|------|------|--------|
+| Indexer | 文档加载、切分、向量化存储 | BaseIndexer | ChromaIndexer, MilvusIndexer |
+| Retriever | 从索引中检索相关文档 | BaseRetriever | SimpleVectorRetriever, RerankingRetriever, FilteredRetriever |
+| Generator | 基于检索文档生成回答 | BaseGenerator | StuffGenerator, MapReduceGenerator, RefineGenerator |
+| Memory | 管理对话历史和上下文 | BaseMemory | ConversationMemory, KnowledgeMemory |
+| Router | 决定是否检索、选择策略 | BaseRouter | SimpleRouter |
+
+### 使用方式
+
+```python
+from modules.rag import RAGChain
+
+# 创建 RAG 链
+rag_chain = RAGChain()
+
+# 初始化默认模块（Chroma + SimpleVector + Stuff）
+rag_chain.init_default_modules(ai_client)
+
+# 构建知识库索引
+rag_chain.build_index("knowledge_base")
+
+# 执行检索
+documents = rag_chain.retrieve("用户问题")
+
+# 生成回答
+answer = rag_chain.generate("用户问题", documents, session_id)
+```
+
+### 自定义模块组合
+
+```python
+from modules.rag import (
+    RAGChain, ChromaIndexer, SimpleVectorRetriever,
+    StuffGenerator, ConversationMemory, SimpleRouter
+)
+
+# 创建自定义配置的 RAG 链
+rag_chain = RAGChain(config={
+    "indexer": {"persist_directory": "db/chroma"},
+    "retriever": {"retrieval_kwargs": {"k": 5}},
+    "generator": {"temperature": 0.7}
+})
+
+# 手动设置各模块
+rag_chain.set_indexer(ChromaIndexer(ai_client))
+rag_chain.set_retriever(SimpleVectorRetriever())
+rag_chain.set_generator(StuffGenerator(llm_client))
+rag_chain.set_memory(ConversationMemory())
+rag_chain.set_router(SimpleRouter())
 ```
 
 ## 快速开始
@@ -77,6 +178,7 @@ LangchainChatFlow/
 - Node.js >= 16
 - npm 或 yarn
 - 阿里云百炼 API 密钥（或 OpenAI API）
+
 
 ### 后端启动
 
@@ -100,10 +202,6 @@ MCP 服务器运行在: `http://localhost:8080/mcp`
 ```bash
 # 新开终端，进入后端目录
 cd backend
-
-# 配置 API 密钥
-# 编辑 config.json 文件，填入你的 API Key
-# 支持阿里云百炼 API（推荐）或 OpenAI API
 
 # 启动服务
 python app.py
@@ -264,7 +362,7 @@ def get_weather(city: str) -> str:
 
 ## 使用流程
 
-1. **准备知识库**: 在 `backend/knowledge_base/` 目录添加文档（支持 .txt、.pdf）
+1. **准备知识库**: 在 `backend/knowledge_base/` 目录添加文档（支持 .txt、.pdf、.docx）
 2. **启动 MCP 服务器**: `python backend/mcp_module/start.py`
 3. **启动应用服务器**: `python backend/app.py`
 4. **开始对话**: 访问前端地址，与智能客服对话
@@ -315,16 +413,34 @@ def my_tool(param1: str) -> str:
 1. 在 `backend/knowledge_base/` 添加或修改文档
 2. 重启服务，系统自动重新向量化
 
+### 扩展 RAG 模块
+
+各模块基类提供默认实现，未实现的模块返回空结果或警告日志：
+
+```python
+# 基类默认行为
+BaseIndexer.build_index()    # 返回错误状态
+BaseRetriever.retrieve()    # 返回空列表
+BaseGenerator.generate()     # 返回空字符串
+BaseMemory.add_message()     # 无操作
+BaseRouter.should_retrieve() # 返回 True
+```
+
 ## 技术栈
 
 **后端:**
 - Flask 3.0.0 - Web 框架
-- OpenAI SDK 1.12.0 - AI API 客户端（兼容阿里云百炼）
+- OpenAI SDK >= 1.40.0 - AI API 客户端（兼容 DeepSeek）
 - Flask-CORS - 跨域支持
+- Flask-Limiter - 限流支持
 - numpy 2.4.4 - 数值计算
 - LangChain >= 0.3.0 - Agent 和工具框架
 - LangChain Core >= 0.3.0 - 核心组件
 - LangChain Community >= 0.3.0 - 社区组件
+- langchain-chroma >= 0.1.0 - Chroma 集成
+- chromadb >= 0.5.0 - 向量数据库
+- pymilvus >= 2.4.0 - Milvus 支持（可选）
+- dashscope >= 1.20.0 - 阿里云百炼支持（可选）
 - MCP - Model Context Protocol（工具服务协议）
 
 **前端:**
@@ -348,6 +464,8 @@ def my_tool(param1: str) -> str:
 - [x] Streamable HTTP 支持
 - [x] 统一日志模块
 - [x] 集中配置管理
+- [x] 模块化 RAG 框架
+- [x] 限流模块集成
 - [ ] 数据库替代 JSON 存储
-- [ ] API 限流和安全验证
+- [ ] API 安全验证
 - [ ] Docker 容器化部署
