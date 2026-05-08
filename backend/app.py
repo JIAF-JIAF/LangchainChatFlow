@@ -77,7 +77,9 @@ def init_system():
 
     print("\n[3/3] 初始化 AI 助手...")
     try:
-        tools = MCPToolService.get_tools(config.MCP_URL)
+        # 从配置的所有启用 MCP 服务器获取工具
+        # 支持多个 MCP 服务器配置，自动合并所有服务器的工具
+        tools = MCPToolService.get_tools()
 
         assistant_instance = Agent(options={
             "prompt": create_few_shot_prompt(),  # 使用默认示例

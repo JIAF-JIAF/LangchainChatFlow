@@ -1,10 +1,10 @@
 """
 MCP 服务模块
-封装 MCP 工具获取逻辑，统一从远程 MCP 服务器获取工具
+封装 MCP 工具获取逻辑，支持从单个或多个远程 MCP 服务器获取工具
 """
 
 import asyncio
-from typing import List, Any
+from typing import List, Any, Optional
 
 from langchain.tools import StructuredTool
 from mcp.client.session import ClientSession
@@ -19,21 +19,59 @@ class MCPToolService:
     """MCP 工具服务类"""
 
     @staticmethod
-    def get_tools(server_url: str = config.MCP_URL) -> List[Any]:
+    def get_tools(server_url: Optional[str] = None) -> List[Any]:
         """
-        从 MCP 服务器获取工具列表
+        从 MCP 服务器获取工具列表（兼容旧版接口）
+        
+        Args:
+            server_url: MCP 服务器地址，若为 None 则从配置的所有启用服务器获取工具
+        """
+        if server_url:
+            # 兼容旧版：从指定单个服务器获取工具
+            return MCPToolService._get_tools_from_server(server_url)
+        else:
+            # 新版：从配置的所有启用服务器获取工具
+            return MCPToolService.get_tools_from_all_servers()
+
+    @staticmethod
+    def get_tools_from_all_servers() -> List[Any]:
+        """
+        从配置文件中所有启用的 MCP 服务器获取工具列表
+        
+        Returns:
+            合并后的工具列表（来自所有启用的 MCP 服务器）
+        """
+        all_tools = []
+        
+        for server_config in config.MCP_SERVERS:
+            if not server_config.get('enabled', True):
+                logger.logger.info(f"MCP 服务器 [{server_config['name']}] 已禁用，跳过")
+                continue
+            
+            server_url = server_config['url']
+            server_name = server_config['name']
+            
+            try:
+                logger.logger.info(f"连接 MCP 服务器 [{server_name}]: {server_url}")
+                tools = MCPToolService._get_tools_from_server(server_url)
+                logger.logger.info(f"从 MCP 服务器 [{server_name}] 获取到 {len(tools)} 个工具")
+                all_tools.extend(tools)
+            except Exception as e:
+                logger.logger.error(f"连接 MCP 服务器 [{server_name}] 失败: {str(e)}")
+        
+        logger.logger.info(f"共获取到 {len(all_tools)} 个工具（来自 {len([s for s in config.MCP_SERVERS if s.get('enabled')])} 个服务器）")
+        return all_tools
+
+    @staticmethod
+    def _get_tools_from_server(server_url: str) -> List[Any]:
+        """
+        从单个 MCP 服务器获取工具列表
         
         Args:
             server_url: MCP 服务器地址
         """
-        logger.logger.info(f"连接 MCP 服务器: {server_url}")
-        
         mcp_tools = asyncio.run(mcp_client.get_tools_from_server(server_url))
-        logger.logger.info(f"从 MCP 服务器获取到 {len(mcp_tools)} 个工具")
-        
-        callable_tools = MCPToolService._create_callable_tools(mcp_tools, server_url)
-        
-        return callable_tools
+        return MCPToolService._create_callable_tools(mcp_tools, server_url)
 
     @staticmethod
     def _create_callable_tools(mcp_tools: List[Any], server_url: str) -> List[StructuredTool]:
