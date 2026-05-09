@@ -31,7 +31,7 @@ from langchain_core.documents import Document
 from langchain.tools import StructuredTool
 
 from .indexer import BaseIndexer, ChromaIndexer
-from .retriever import BaseRetriever, SimpleVectorRetriever
+from .retriever import BaseRetriever, SimpleVectorRetriever, RerankingRetriever
 from .generator import BaseGenerator, StuffGenerator
 from .memory import BaseMemory, ConversationMemory
 from .router import BaseRouter, SimpleRouter, LLMRouter
@@ -112,9 +112,15 @@ class RAGChain:
         """
         if name in self.indexers:
             self.current_indexer = self.indexers[name]
-            # 更新检索器的索引器
-            self.retriever.indexer = self.current_indexer
-            self.retriever._init_retriever()
+            # 更新检索器的索引器（支持重排序检索器）
+            if isinstance(self.retriever, RerankingRetriever):
+                # 如果是重排序检索器，更新其基础检索器的索引器
+                self.retriever.base_retriever.indexer = self.current_indexer
+                self.retriever.base_retriever._init_retriever()
+            else:
+                # 普通检索器直接更新
+                self.retriever.indexer = self.current_indexer
+                self.retriever._init_retriever()
             print(f"[RAG] 已切换到知识库: {name}")
             return True
         print(f"[RAG] 未找到知识库: {name}")
@@ -194,6 +200,19 @@ class RAGChain:
         )
         print("[RAG] 使用 LLMRouter 智能路由（支持多知识库选择）")
         
+        # 检查是否启用重排序
+        retriever_config = self.config.get("retriever", {})
+        if retriever_config.get("use_reranking", False):
+            # 创建重排序检索器，包装基础检索器
+            base_retriever = SimpleVectorRetriever(config=retriever_config)
+            self.retriever = RerankingRetriever(
+                base_retriever=base_retriever,
+                config=retriever_config.get("reranking", {})
+            )
+            print("[RAG] 使用 RerankingRetriever 重排序检索器")
+        else:
+            print("[RAG] 使用 SimpleVectorRetriever 基础检索器")
+        
         # 生成器：默认使用基类（需要 ai_client 时可在 build_index 后替换为 StuffGenerator）
         # self.generator = StuffGenerator(
         #     llm_client=ai_client,
@@ -224,8 +243,12 @@ class RAGChain:
                 
                 # 如果是默认知识库，设置为当前检索器使用的索引器
                 if kb_name == "default" and result.get("status") in ("loaded", "created"):
-                    self.retriever.indexer = indexer
-                    self.retriever._init_retriever()
+                    if isinstance(self.retriever, RerankingRetriever):
+                        self.retriever.base_retriever.indexer = indexer
+                        self.retriever.base_retriever._init_retriever()
+                    else:
+                        self.retriever.indexer = indexer
+                        self.retriever._init_retriever()
             else:
                 print(f"[RAG] 知识库 {kb_name} 目录不存在: {kb_source_dir}")
                 results[kb_name] = {"status": "error", "message": "目录不存在"}

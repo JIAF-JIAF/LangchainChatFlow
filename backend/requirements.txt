@@ -22,3 +22,6 @@ pymilvus>=2.4.0
 
 # MCP (Model Context Protocol) 工具
 mcp>=1.0.0
+
+# 重排序模型
+sentence-transformers>=2.2.0

@@ -4,16 +4,18 @@
 
 已实现：
 - SimpleVectorRetriever：基于向量相似度的简单检索
+- RerankingRetriever：重排序检索（使用 Cross-Encoder 模型）
 
 预留接口：
-- RerankingRetriever：重排序检索
 - FilteredRetriever：过滤检索
 """
 
 from .base import BaseRetriever
 from .simple import SimpleVectorRetriever
+from .reranking import RerankingRetriever
 
 __all__ = [
     'BaseRetriever',
-    'SimpleVectorRetriever'
+    'SimpleVectorRetriever',
+    'RerankingRetriever'
 ]
