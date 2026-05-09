@@ -25,6 +25,7 @@ RAG（Retrieval-Augmented Generation）是检索增强生成的缩写，
 - get_retrieve_knowledge_tool：获取供 Agent 调用的检索工具
 """
 
+import os
 from typing import Optional, Dict, Any, List
 from langchain_core.documents import Document
 from langchain.tools import StructuredTool
@@ -33,7 +34,7 @@ from .indexer import BaseIndexer, ChromaIndexer
 from .retriever import BaseRetriever, SimpleVectorRetriever
 from .generator import BaseGenerator, StuffGenerator
 from .memory import BaseMemory, ConversationMemory
-from .router import BaseRouter, SimpleRouter
+from .router import BaseRouter, SimpleRouter, LLMRouter
 
 
 class RAGChain:
@@ -41,10 +42,12 @@ class RAGChain:
     RAG 链核心类
     
     组合索引、检索、生成、记忆和路由模块，实现完整的 RAG 流程。
+    支持多知识库切换，通过路由器选择合适的知识库。
     
     属性：
         config: 配置字典
-        indexer: 索引器实例
+        indexers: 索引器字典，key 为知识库名称
+        current_indexer: 当前使用的索引器
         retriever: 检索器实例
         generator: 生成器实例
         memory: 记忆模块实例
@@ -60,6 +63,7 @@ class RAGChain:
         run: 完整 RAG 流程
         get_retrieve_knowledge_tool: 获取检索工具
         get_tool: 获取完整 RAG 工具
+        switch_knowledge_base: 切换知识库
     """
 
     def __init__(self, config: Optional[Dict] = None):
@@ -71,8 +75,10 @@ class RAGChain:
         """
         self.config = config or {}
         
-        # 模块实例（始终存在，使用默认实现或基类）
-        self.indexer: BaseIndexer = BaseIndexer()  # 默认使用基类，init_default_modules 中可替换
+        # 多知识库支持：索引器字典，key 为知识库名称
+        self.indexers: Dict[str, BaseIndexer] = {}
+        self.current_indexer: BaseIndexer = BaseIndexer()
+        
         self.retriever: BaseRetriever = SimpleVectorRetriever(config=self.config.get("retriever", {}))
         self.generator: BaseGenerator = BaseGenerator()  # 默认使用基类，init_default_modules 中可替换
         self.memory: BaseMemory = ConversationMemory(config=self.config.get("memory", {}))
@@ -81,14 +87,38 @@ class RAGChain:
         # 初始化状态
         self.initialized = False
 
-    def set_indexer(self, indexer: BaseIndexer):
+    def set_indexer(self, indexer: BaseIndexer, name: str = "default"):
         """
-        设置索引器
+        设置索引器（支持多知识库）
         
         Args:
             indexer: 索引器实例
+            name: 知识库名称，默认为 "default"
         """
-        self.indexer = indexer
+        self.indexers[name] = indexer
+        # 如果是第一个索引器，设置为当前索引器
+        if not self.current_indexer or not isinstance(self.current_indexer, BaseIndexer):
+            self.current_indexer = indexer
+
+    def switch_knowledge_base(self, name: str) -> bool:
+        """
+        切换知识库
+        
+        Args:
+            name: 知识库名称
+            
+        Returns:
+            切换成功返回 True，失败返回 False
+        """
+        if name in self.indexers:
+            self.current_indexer = self.indexers[name]
+            # 更新检索器的索引器
+            self.retriever.indexer = self.current_indexer
+            self.retriever._init_retriever()
+            print(f"[RAG] 已切换到知识库: {name}")
+            return True
+        print(f"[RAG] 未找到知识库: {name}")
+        return False
 
     def set_retriever(self, retriever: BaseRetriever):
         """
@@ -131,20 +161,38 @@ class RAGChain:
         使用默认模块初始化 RAG 链
         
         默认配置：
-        - 索引器：ChromaIndexer
+        - 索引器：ChromaIndexer（支持多知识库）
         - 检索器：SimpleVectorRetriever（已在初始化时创建）
         - 生成器：StuffGenerator
         - 记忆：ConversationMemory（已在初始化时创建）
-        - 路由：SimpleRouter（已在初始化时创建）
+        - 路由：LLMRouter（智能路由，支持多知识库选择）
         
         Args:
             ai_client: AI 客户端实例（用于嵌入和生成）
         """
-        # 索引器：Chroma（需要 ai_client）
-        self.indexer = ChromaIndexer(
+        # 初始化多个知识库索引器
+        # 1. default 知识库 - 产品文档
+        default_indexer = ChromaIndexer(
             ai_client=ai_client,
-            config=self.config.get("indexer", {})
+            config=self.config.get("indexer", {}),
+            collection_name="default"
         )
+        self.set_indexer(default_indexer, "default")
+        
+        # 2. politics 知识库 - 政策文档
+        politics_indexer = ChromaIndexer(
+            ai_client=ai_client,
+            config=self.config.get("indexer", {}),
+            collection_name="politics"
+        )
+        self.set_indexer(politics_indexer, "politics")
+        
+        # 路由器：使用 LLMRouter 智能路由
+        self.router = LLMRouter(
+            llm_client=ai_client,
+            config=self.config.get("router", {})
+        )
+        print("[RAG] 使用 LLMRouter 智能路由（支持多知识库选择）")
         
         # 生成器：默认使用基类（需要 ai_client 时可在 build_index 后替换为 StuffGenerator）
         # self.generator = StuffGenerator(
@@ -156,26 +204,37 @@ class RAGChain:
 
     def build_index(self, source_dir: str = "knowledge_base") -> Dict[str, Any]:
         """
-        构建知识库索引
+        构建多知识库索引
         
         Args:
-            source_dir: 源文档目录
+            source_dir: 源文档根目录，包含各知识库子目录
             
         Returns:
-            索引构建结果字典
+            索引构建结果字典，包含各知识库的构建状态
         """
-        result = self.indexer.build_index(source_dir)
+        results = {}
         
-        # 索引构建成功后，关联索引器到检索器
-        if result.get("status") in ("loaded", "created"):
-            self.retriever.indexer = self.indexer
-            self.retriever._init_retriever()
+        # 为每个知识库构建索引
+        for kb_name, indexer in self.indexers.items():
+            kb_source_dir = os.path.join(source_dir, kb_name)
+            if os.path.exists(kb_source_dir):
+                print(f"[RAG] 构建知识库 {kb_name}，源目录: {kb_source_dir}")
+                result = indexer.build_index(kb_source_dir)
+                results[kb_name] = result
+                
+                # 如果是默认知识库，设置为当前检索器使用的索引器
+                if kb_name == "default" and result.get("status") in ("loaded", "created"):
+                    self.retriever.indexer = indexer
+                    self.retriever._init_retriever()
+            else:
+                print(f"[RAG] 知识库 {kb_name} 目录不存在: {kb_source_dir}")
+                results[kb_name] = {"status": "error", "message": "目录不存在"}
         
-        return result
+        return results
 
     def retrieve(self, query: str) -> List[Document]:
         """
-        执行检索
+        执行检索（支持多知识库切换）
         
         Args:
             query: 用户查询
@@ -187,11 +246,26 @@ class RAGChain:
         print(f"[RAG] ---------- 检索阶段开始 ----------")
         print(f"[RAG] 查询内容: {query}")
 
-        # 使用路由器判断是否需要检索
+        # 1. 使用路由器判断是否需要检索
         if not self.router.should_retrieve(query):
+            print("[RAG] 路由器判断：不需要检索")
             return []
         
-        return self.retriever.retrieve(query)
+        # 2. 使用路由器选择知识库
+        kb_name = self.router.select_knowledge_base(query)
+        print(f"[RAG] 路由器选择知识库: {kb_name}")
+        
+        # 3. 切换到对应的知识库
+        if kb_name and not self.switch_knowledge_base(kb_name):
+            # 如果切换失败，使用默认知识库
+            print(f"[RAG] 切换知识库失败，使用默认知识库")
+            self.switch_knowledge_base("default")
+        
+        # 4. 执行检索
+        documents = self.retriever.retrieve(query)
+        print(f"[RAG] 检索完成，找到 {len(documents)} 篇相关文档")
+        
+        return documents
 
     def generate(self, query: str, documents: List[Document], 
                 session_id: str = "default") -> str:

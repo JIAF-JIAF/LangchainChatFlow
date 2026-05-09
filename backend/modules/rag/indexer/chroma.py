@@ -16,13 +16,15 @@ class ChromaIndexer(BaseIndexer):
     Chroma 向量数据库索引器
     
     实现完整的向量存储功能，兼容原有 VectorStore 接口。
+    支持多知识库，通过 collection_name 区分不同知识库。
     """
 
-    def __init__(self, ai_client=None, config: Optional[Dict] = None):
+    def __init__(self, ai_client=None, config: Optional[Dict] = None, collection_name: Optional[str] = None):
         super().__init__(ai_client=ai_client, config=config)
         
         self.persist_directory = self.config.get("persist_directory", "db/chroma")
-        self.collection_name = self.config.get("collection_name", "knowledge_base")
+        # 优先使用传入的 collection_name 参数，其次使用配置中的值，最后使用默认值
+        self.collection_name = collection_name or self.config.get("collection_name", "knowledge_base")
         self.vector_store = None
 
     def build_index(self, source_dir: str = "knowledge_base") -> Dict[str, Any]:
